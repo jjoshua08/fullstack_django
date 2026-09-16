@@ -78,7 +78,7 @@ import os
 load_dotenv()
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.getenv('DB_NAME'),
         'PASSWORD': os.getenv('DB_PASSWORD'),
     }
