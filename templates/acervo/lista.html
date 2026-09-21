@@ -2,10 +2,30 @@
 
 {% block conteudo %}
     <h1>Acervo</h1>
+    <form method="get">
+        <label for="titulo">Nome/título</label>
+        <input type="search" id="titulo" name="titulo" value="{{ titulo }}">
+        <label for="tipo_acervo">Tipo de acervo</label>
+        <select id="tipo_acervo" name="tipo_acervo">
+            <option value="">Todos</option>
+            {% for valor, rotulo in tipos_acervo %}
+                <option value="{{ valor }}"{% if tipo_acervo == valor %} selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+        <label for="categoria">Categoria</label>
+        <select id="categoria" name="categoria">
+            <option value="">Todas</option>
+            {% for valor, rotulo in categorias %}
+                <option value="{{ valor }}"{% if categoria == valor %} selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Pesquisar</button>
+    </form>
     <ul>
         {% for livro in livros %}
             <li>
                 {{ livro.titulo }} — {{ livro.autor }} ({{ livro.ano }}) —
+                {{ livro.get_tipo_acervo_display }} — {{ livro.get_categoria_display }} —
                 {% if livro.disponivel %}Disponível{% else %}Indisponível{% endif %}
             </li>
         {% empty %}
