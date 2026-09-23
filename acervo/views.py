@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.shortcuts import render, redirect
 from .models import Livro
 from .forms import LivroForm
@@ -8,12 +9,15 @@ def lista_livros(request):
     tipo_acervo = request.GET.get('tipo_acervo', '')
     categoria = request.GET.get('categoria', '')
 
+    filtro = Q()
     if titulo:
-        livros = livros.filter(titulo__icontains=titulo)
+        filtro &= Q(titulo__icontains=titulo)
     if tipo_acervo:
-        livros = livros.filter(tipo_acervo=tipo_acervo)
+        filtro &= Q(tipo_acervo=tipo_acervo)
     if categoria:
-        livros = livros.filter(categoria=categoria)
+        filtro &= Q(categoria=categoria)
+
+    livros = livros.filter(filtro)
 
     return render(request, 'acervo/lista.html', {
         'livros': livros,
