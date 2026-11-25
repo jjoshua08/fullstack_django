@@ -42,8 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'acervo',
+    'core',
     'rest_framework',
-    'acervo,'
 ]
 
 MIDDLEWARE = [
@@ -133,3 +133,7 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
