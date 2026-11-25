@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'acervo',
     'core',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
