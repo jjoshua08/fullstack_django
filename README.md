@@ -1,5 +1,85 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 7: dashboard por papel (slide 36)
+
+Commits das etapas 1–6 confirmados: `b23e681`, `ee82f95`, `bbb6b95`, `b5c2589`,
+`2a81da4` e `64efb8a`. Esta seção substitui as restrições temporárias descritas
+nos registros históricos abaixo para CSV e série na API.
+
+`Perfil.papel` é `CharField(max_length=8)` com choices `admin`/`operador`, padrão
+`operador`. A propriedade `eh_admin` verifica exclusivamente o papel de negócio.
+Migração: `core.0003_perfil_papel`. Perfis existentes recebem operador, inclusive
+perfis de staff/superusuário, sem mudança de vínculos ou promoção automática.
+A preservação foi validada em banco de testes; a migração NÃO foi aplicada ao
+banco persistente. Após autorização, executar:
+
+```bash
+.venv/bin/python -B manage.py migrate core
+```
+
+Até aplicar a migração, o banco local não possui a coluna necessária ao código.
+Banco e backup não foram alterados nesta etapa.
+
+| Recurso | Administrador | Operador |
+|---|---|---|
+| KPIs e ranking HTML/API | Sim | Sim |
+| Distribuição HTML | Sim | Sim |
+| Série HTML/API (`por_mes`) | Sim | Não |
+| Download CSV | Sim | HTTP 403 |
+
+`core/decorators.py` implementa `papel_requerido(papel)` com `functools.wraps`,
+autenticação, verificação de perfil/papel e 403 para autenticados sem autorização.
+Anônimos são redirecionados ao login. `exportar_csv` conserva `login_required`,
+usa `@papel_requerido('admin')` e chama o gerador existente, mantendo filtros e
+proteção contra fórmulas. O bloqueio temporário foi removido.
+
+O HTML usa `mostra_series = request.user.perfil.eh_admin`; operador não calcula
+nem recebe `serie_mensal`/`por_mes` no contexto, JSON, canvas ou scripts do gráfico.
+O JavaScript também verifica a existência dos elementos antes de criar Chart.
+O link CSV só aparece para administrador e preserva início/fim. A API mantém
+`IsAuthenticated` e só acrescenta `por_mes` para administrador, reutilizando
+`serie_mensal()` e o filtro por período. Não foram duplicadas agregações.
+`org_atual()` agora converte perfil ausente em 403, inclusive em HTML/API/CSV.
+Flags `is_staff`/`is_superuser` não concedem acesso à série ou ao CSV.
+
+### Administração e teste manual após aplicar a migração
+
+1. Entrar no Django Admin com responsável autorizado a alterar Perfil.
+2. Em Perfis, selecionar usuários de teste com organização definida e atribuir
+   `Administrador` a um e `Operador` a outro. Repetir em outra organização para
+   verificar isolamento. Nenhuma atribuição persistente foi feita nesta etapa.
+3. Entrar como administrador de organização em `/accounts/login/`, abrir
+   `/dashboard/`, filtrar período e conferir gráfico e download CSV.
+4. Abrir `/api/dashboard/?format=json`: a resposta deve incluir `por_mes`.
+5. Entrar como operador: conferir KPIs/ranking/distribuição, sem gráfico/link;
+   acessar `/dashboard/exportar-csv/` diretamente deve retornar 403, e a API
+   não deve conter `por_mes`. Parâmetros `papel=admin` não alteram permissões.
+6. Sem perfil, dashboard/API/CSV devem responder 403, sem erro 500.
+
+`PerfilAdmin` expõe usuário, organização e papel, preservando as permissões nativas
+do Django Admin. Administrador de organização não recebe status staff nem acesso
+administrativo automaticamente. Atribuir permissão de alteração de Perfil é uma
+responsabilidade administrativa e permite gerenciar os papéis; não deve ser
+concedida a quem não pode administrá-los. Formulários comuns não expõem esse campo.
+
+### Testes e consultas
+
+A cobertura dos 62 testes anteriores foi preservada. Fixtures dos testes de série
+HTML/gráfico/desempenho passaram a usar explicitamente papel admin para manter
+as verificações anteriores; os testes de restrição de CSV/API usam o padrão operador.
+Nenhum teste foi excluído. Novos testes cobrem propriedade/padrão, migração,
+decorator, matriz de acesso em duas organizações, filtro, ausência de série no
+backend, usuário sem perfil, flags de staff/superusuário e acesso administrativo.
+
+O dashboard de administrador continua em **8 consultas**, com 3 e 30 livros,
+conforme os testes da etapa 4. Operador usa **7 consultas**, antes e depois de
+adicionar 20 livros, pois a consulta da série não é executada. Não há nova
+otimização nem N+1. A ausência de chamada à série para operador é testada no HTML
+e na API. Não houve validação visual em navegador nem antecipação da etapa 8.
+Resultado: **71 testes aprovados**, com a cobertura dos 62 anteriores e nove
+novos testes. `check`, `makemigrations --check --dry-run`, `pip check` e
+`git diff --check` passaram. A migração foi validada somente no banco de testes.
+
 ## Aula 17 — Etapa 6: API do dashboard (slide 35)
 
 Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95`, `b5c2589`

@@ -309,8 +309,8 @@ class DashboardViewTests(TestCase):
         self.org_b = Organizacao.objects.create(nome='Dashboard B')
         self.usuario_a = get_user_model().objects.create_user(username='dashboard_a')
         self.usuario_b = get_user_model().objects.create_user(username='dashboard_b')
-        Perfil.objects.create(usuario=self.usuario_a, organizacao=self.org_a)
-        Perfil.objects.create(usuario=self.usuario_b, organizacao=self.org_b)
+        Perfil.objects.create(usuario=self.usuario_a, organizacao=self.org_a, papel='admin')
+        Perfil.objects.create(usuario=self.usuario_b, organizacao=self.org_b, papel='admin')
         for org, autor, data, disponivel, tipo in [
             (self.org_a, 'Ana', date(2025, 1, 10), True, 'fisico'),
             (self.org_a, 'Ana', date(2025, 2, 10), False, 'digital'),
@@ -441,8 +441,8 @@ class DashboardChartTests(TestCase):
         outra_org = Organizacao.objects.create(nome='Gráfico B')
         self.usuario = get_user_model().objects.create_user(username='grafico_a')
         self.outro_usuario = get_user_model().objects.create_user(username='grafico_b')
-        Perfil.objects.create(usuario=self.usuario, organizacao=self.org)
-        Perfil.objects.create(usuario=self.outro_usuario, organizacao=outra_org)
+        Perfil.objects.create(usuario=self.usuario, organizacao=self.org, papel='admin')
+        Perfil.objects.create(usuario=self.outro_usuario, organizacao=outra_org, papel='admin')
         for org, data in [
             (self.org, date(2025, 2, 20)),
             (self.org, date(2024, 12, 31)),

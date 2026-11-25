@@ -21,6 +21,16 @@ class DaOrganizacao(models.Model):
 
 
 class Perfil(models.Model):
+    papel = models.CharField(
+        max_length=8,
+        choices=[('admin', 'Administrador'), ('operador', 'Operador')],
+        default='operador',
+    )
+
+    @property
+    def eh_admin(self):
+        return self.papel == 'admin'
+
     usuario = models.OneToOneField(
         User, on_delete=models.CASCADE
     )

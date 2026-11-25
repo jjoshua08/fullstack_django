@@ -1,4 +1,6 @@
 import csv
+from core.decorators import papel_requerido
+from core.models import Perfil
 
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
@@ -12,7 +14,10 @@ from django.shortcuts import get_object_or_404
 
 
 def org_atual(request):
-    return request.user.perfil.organizacao
+    try:
+        return request.user.perfil.organizacao
+    except Perfil.DoesNotExist:
+        raise PermissionDenied('Usuário sem perfil.')
 
 
 def proteger_celula_csv(valor):
@@ -45,10 +50,9 @@ def gerar_csv_livros(request):
 
 
 @login_required
+@papel_requerido('admin')
 def exportar_csv(request):
-    # Bloqueio temporário obrigatório: etapa 7 definirá a autorização por papel
-    # antes de permitir chamar gerar_csv_livros(request). Não usar flags do Admin.
-    raise PermissionDenied('Exportação indisponível até a definição dos papéis de negócio.')
+    return gerar_csv_livros(request)
 
 
 @login_required
@@ -56,20 +60,22 @@ def dashboard(request):
     org = org_atual(request)
     base = Livro.objects.filter(organizacao=org)
     base = filtrar_periodo(request, base)
-    por_mes_qs = serie_mensal(org, base)
-    por_mes = [
-        {'mes': r['mes'].strftime('%m/%Y'), 'total': r['total']}
-        for r in por_mes_qs
-    ]
+    mostra_series = request.user.perfil.eh_admin
     contexto = {
-        'pode_exportar_csv': False,  # Liberação por papel somente na etapa 7.
+        'pode_exportar_csv': mostra_series,
+        'mostra_series': mostra_series,
         'form': PeriodoForm(request.GET),
         'kpis': kpis(org, base),
         'ranking': ranking_autores(org, base),
-        'serie_mensal': por_mes_qs,
-        'por_mes': por_mes,
         'distribuicao': distribuicao_acervo(org, base),
     }
+    if mostra_series:
+        por_mes_qs = serie_mensal(org, base)
+        contexto['serie_mensal'] = por_mes_qs
+        contexto['por_mes'] = [
+            {'mes': r['mes'].strftime('%m/%Y'), 'total': r['total']}
+            for r in por_mes_qs
+        ]
     return render(request, 'acervo/dashboard.html', contexto)
 
 @login_required

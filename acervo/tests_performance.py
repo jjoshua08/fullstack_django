@@ -19,7 +19,7 @@ class DesempenhoTests(TestCase):
         self.org = Organizacao.objects.create(nome='Organização de desempenho')
         self.outra = Organizacao.objects.create(nome='Outra organização')
         self.usuario = get_user_model().objects.create_user(username='desempenho')
-        Perfil.objects.create(usuario=self.usuario, organizacao=self.org)
+        Perfil.objects.create(usuario=self.usuario, organizacao=self.org, papel='admin')
         self.criar_livros(3)
         Livro.objects.create(organizacao=self.outra, titulo='Externo', autor='Externo', ano=2020)
         self.livro = Livro.objects.filter(organizacao=self.org).first()
