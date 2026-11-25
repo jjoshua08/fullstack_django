@@ -12,7 +12,8 @@ class Organizacao(models.Model):
 class DaOrganizacao(models.Model):
     organizacao = models.ForeignKey(
         'core.Organizacao',
-        on_delete=models.PROTECT
+        on_delete=models.PROTECT,
+        null=True
     )
 
     class Meta:

@@ -1,6 +1,7 @@
 from django.db import models
+from core.models import DaOrganizacao
 
-class Livro(models.Model):
+class Livro(DaOrganizacao):
     TIPOS_ACERVO = [
         ("digital", "Digital"),
         ("fisico", "Físico")
