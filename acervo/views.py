@@ -16,11 +16,17 @@ def dashboard(request):
     org = org_atual(request)
     base = Livro.objects.filter(organizacao=org)
     base = filtrar_periodo(request, base)
+    por_mes_qs = serie_mensal(org, base)
+    por_mes = [
+        {'mes': r['mes'].strftime('%m/%Y'), 'total': r['total']}
+        for r in por_mes_qs
+    ]
     contexto = {
         'form': PeriodoForm(request.GET),
         'kpis': kpis(org, base),
         'ranking': ranking_autores(org, base),
-        'serie_mensal': serie_mensal(org, base),
+        'serie_mensal': por_mes_qs,
+        'por_mes': por_mes,
         'distribuicao': distribuicao_acervo(org, base),
     }
     return render(request, 'acervo/dashboard.html', contexto)

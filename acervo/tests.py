@@ -433,3 +433,99 @@ class DashboardViewTests(TestCase):
         self.assertEqual(list(serie_mensal(self.org_a, base)), [
             {'mes': date(2025, 2, 1), 'total': 1},
         ])
+
+
+class DashboardChartTests(TestCase):
+    def setUp(self):
+        self.org = Organizacao.objects.create(nome='Gráfico A')
+        outra_org = Organizacao.objects.create(nome='Gráfico B')
+        self.usuario = get_user_model().objects.create_user(username='grafico_a')
+        self.outro_usuario = get_user_model().objects.create_user(username='grafico_b')
+        Perfil.objects.create(usuario=self.usuario, organizacao=self.org)
+        Perfil.objects.create(usuario=self.outro_usuario, organizacao=outra_org)
+        for org, data in [
+            (self.org, date(2025, 2, 20)),
+            (self.org, date(2024, 12, 31)),
+            (self.org, date(2025, 1, 15)),
+            (self.org, date(2025, 2, 1)),
+            (outra_org, date(2025, 1, 15)),
+            (outra_org, date(2023, 5, 1)),
+        ]:
+            livro = Livro.objects.create(
+                organizacao=org, titulo='Livro de teste', autor='Autora',
+                ano=2020, tipo_acervo='fisico',
+            )
+            Livro.objects.filter(pk=livro.pk).update(data_cadastro=data)
+        self.client.force_login(self.usuario)
+        self.url = reverse('dashboard')
+
+    def test_contexto_serializavel_formatacao_e_ordem_cronologica(self):
+        import json
+
+        resposta = self.client.get(self.url)
+        esperado = [
+            {'mes': '12/2024', 'total': 1},
+            {'mes': '01/2025', 'total': 1},
+            {'mes': '02/2025', 'total': 2},
+        ]
+        self.assertEqual(resposta.context['por_mes'], esperado)
+        self.assertEqual(json.loads(json.dumps(resposta.context['por_mes'])), esperado)
+
+    def test_soma_da_serie_corresponde_ao_total(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(
+            sum(item['total'] for item in resposta.context['por_mes']),
+            resposta.context['kpis']['total'],
+        )
+        self.assertEqual(resposta.context['kpis']['total'], 4)
+
+    def test_serie_e_demais_metricas_respeitam_periodo(self):
+        resposta = self.client.get(self.url, {'inicio': '2025-01-15', 'fim': '2025-02-01'})
+        self.assertEqual(resposta.context['por_mes'], [
+            {'mes': '01/2025', 'total': 1}, {'mes': '02/2025', 'total': 1},
+        ])
+        self.assertEqual(resposta.context['kpis'], {'total': 2, 'disponiveis': 2})
+        self.assertEqual(list(resposta.context['ranking']), [{'autor': 'Autora', 'total': 2}])
+        self.assertEqual(list(resposta.context['distribuicao']), [{'tipo_acervo': 'fisico', 'total': 2}])
+
+    def test_serie_isolada_por_organizacao(self):
+        self.client.force_login(self.outro_usuario)
+        resposta = self.client.get(self.url, {'organizacao': self.org.pk})
+        self.assertEqual(resposta.context['por_mes'], [
+            {'mes': '05/2023', 'total': 1}, {'mes': '01/2025', 'total': 1},
+        ])
+        self.assertEqual(resposta.context['kpis']['total'], 2)
+
+    def test_grafico_sem_dados(self):
+        resposta = self.client.get(self.url, {'inicio': '2030-01-01'})
+        self.assertEqual(resposta.context['por_mes'], [])
+        self.assertEqual(resposta.context['kpis']['total'], 0)
+        self.assertContains(resposta, 'Sem dados no período.')
+        self.assertContains(resposta, '<script id="dados-mes" type="application/json">[]</script>', html=True)
+        self.assertContains(resposta, '<canvas id="graf"')
+
+    def test_json_script_canvas_e_ordem_dos_scripts(self):
+        import json
+        import re
+
+        resposta = self.client.get(self.url)
+        html = resposta.content.decode()
+        bloco = re.search(r'<script id="dados-mes" type="application/json">(.*?)</script>', html, re.S)
+        self.assertIsNotNone(bloco)
+        self.assertEqual(json.loads(bloco.group(1)), resposta.context['por_mes'])
+        self.assertContains(resposta, '<canvas id="graf"')
+        self.assertContains(resposta, 'Livros cadastrados por mês')
+        self.assertContains(resposta, 'src="/static/js/chart.umd.js"')
+        self.assertContains(resposta, 'src="/static/js/dashboard.js"')
+        self.assertLess(html.index('id="graf"'), html.index('src="/static/js/chart.umd.js"'))
+        self.assertLess(html.index('src="/static/js/chart.umd.js"'), html.index('src="/static/js/dashboard.js"'))
+
+    def test_data_invalida_preserva_comportamento_do_periodo(self):
+        resposta = self.client.get(self.url, {'inicio': 'invalida', 'fim': '2024-12-31'})
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.context['form'].is_valid())
+        self.assertEqual(resposta.context['por_mes'], [
+            {'mes': '12/2024', 'total': 1},
+            {'mes': '01/2025', 'total': 1},
+            {'mes': '02/2025', 'total': 2},
+        ])

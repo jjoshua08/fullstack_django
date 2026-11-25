@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block conteudo %}
     <h1>Dashboard do acervo</h1>
@@ -47,4 +48,16 @@
             {% endfor %}
         </tbody>
     </table>
+
+    <h2 id="titulo-graf">Livros cadastrados por mês</h2>
+    {% if not por_mes %}
+        <p>Sem dados no período.</p>
+    {% endif %}
+    {{ por_mes|json_script:"dados-mes" }}
+    <canvas id="graf" role="img" aria-labelledby="titulo-graf">
+        Livros cadastrados por mês. Seu navegador precisa suportar canvas para exibir o gráfico.
+    </canvas>
+
+    <script src="{% static 'js/chart.umd.js' %}"></script>
+    <script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}

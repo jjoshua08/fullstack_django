@@ -1,5 +1,47 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 3: gráfico de barras
+
+Pré-requisitos confirmados: commits `b23e681` (etapa 1) e `ee82f95` (etapa 2).
+O dashboard inclui o gráfico **Livros cadastrados por mês** (slides 14–18).
+A view reutiliza o mesmo queryset da série mensal, já restrito à organização
+e ao período, e formata os meses com `strftime('%m/%Y')` na lista `por_mes`.
+O contexto anterior `serie_mensal` é preservado com o mesmo queryset avaliado,
+sem repetir a consulta. O JavaScript apenas mapeia os resultados recebidos.
+
+O template usa `json_script` com ID `dados-mes`, canvas `graf` e carrega os
+scripts locais, na ordem, após o canvas. `dashboard.js` usa `JSON.parse()` e
+`new Chart()` com `type: 'bar'`. Sem dados, envia `[]` e exibe a mensagem de
+ausência de dados, sem inventar valores. As regras anteriores de datas inválidas
+e isolamento continuam em vigor.
+
+Biblioteca: **Chart.js 4.4.8**, distribuição UMD oficial, sem alteração do
+conteúdo, em `acervo/static/js/chart.umd.js`. Origem fixada:
+https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.js
+Licença MIT incluída em `acervo/static/js/Chart.js.LICENSE.md`.
+A documentação oficial descreve esse modo de integração:
+https://www.chartjs.org/docs/latest/getting-started/integration.html
+Não é necessário acesso ao CDN no navegador, nem alterar `settings.py`.
+
+Validação automatizada: **38 testes aprovados**, preservando os 31 anteriores.
+Os sete novos testes cobrem formato/ordem dos meses, serialização, soma igual
+ao KPI, período, isolamento, vazio, JSON/canvas/scripts e datas inválidas.
+Os comandos `check`, `makemigrations --check --dry-run`,
+`findstatic js/chart.umd.js js/dashboard.js` e `git diff --check` passaram.
+
+**Validação visual em navegador não executada nesta etapa.** Para realizá-la:
+
+1. Executar `.venv/bin/python -B manage.py runserver` e entrar com usuário com perfil.
+2. Abrir `http://127.0.0.1:8000/dashboard/` e conferir título, barras e meses.
+3. Comparar a soma das barras com o total de livros e a distribuição.
+4. Aplicar início/fim, limpar o período e testar uma data inválida.
+5. Escolher um período sem livros: mensagem de ausência e nenhum valor fictício.
+6. Repetir em outra organização e conferir o isolamento.
+7. Verificar no console/rede do navegador que os dois scripts carregam sem erros.
+
+O banco e o backup mantiveram os hashes anteriores ao trabalho. Nenhum commit,
+model, migração, API, CSV ou papel foi criado nesta etapa.
+
 ## Aula 17 — Etapa 2: dashboard e período
 
 A etapa 1 está registrada no commit `b23e681`. A etapa 2 acrescenta `/dashboard/`,
