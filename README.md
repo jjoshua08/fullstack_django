@@ -1,5 +1,61 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 6: API do dashboard (slide 35)
+
+Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95`, `b5c2589`
+e `2a81da4`. DRF **3.18.3** já estava instalado, fixado em `requirements.txt`
+e registrado em `INSTALLED_APPS`; não foi necessário reinstalar ou alterar
+configurações, inclusive a Debug Toolbar. A versão declara compatibilidade com
+Python 3.14 e Django 6.1: https://pypi.org/project/djangorestframework/3.18.3/
+
+`acervo/api.py` define `DashboardApi(APIView)`,
+`permission_classes = [IsAuthenticated]`, `get()` e `Response()`.
+A rota `/api/dashboard/` usa `DashboardApi.as_view()` e retorna somente
+`kpis` (total/disponiveis) e `ranking` (até cinco autores).
+Reutiliza `org_atual()`, `filtrar_periodo()`, `kpis()` e `ranking_autores()`;
+não duplica agregações nem adiciona serializers, routers ou ViewSets.
+Parâmetros `organizacao`/`organizacao_id` não substituem a organização do perfil.
+
+Períodos usam `inicio`/`fim` inclusivos. Datas inválidas preservam o comportamento
+anterior: nenhum limite é aplicado, mas o escopo da organização permanece.
+Período sem registros retorna KPIs zero e ranking vazio. A API não expõe série
+mensal, mesmo para staff/superusuário ou por parâmetros enviados pelo cliente.
+A exportação CSV continua bloqueada. A autorização por papel pertence à etapa 7.
+O usuário autenticado deve possuir Perfil, como nas views anteriores; o tratamento
+geral de usuário sem perfil continua uma pendência anterior, sem refatoração aqui.
+
+### Testes e reprodução
+
+Nove testes novos em `acervo/tests_api.py` cobrem autenticação, isolamento entre
+duas organizações, período, igualdade com HTML, ranking, vazio, datas inválidas,
+restrições temporárias e recusa de POST. As fixtures não alteram dados persistentes.
+
+```bash
+API_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_api
+```
+
+Resposta JSON efetivamente obtida no teste:
+
+```json
+{"kpis": {"total": 21, "disponiveis": 12}, "ranking": [{"autor": "Autor 0", "total": 6}, {"autor": "Autor 1", "total": 5}, {"autor": "Autor 2", "total": 4}, {"autor": "Autor 3", "total": 3}, {"autor": "Autor 4", "total": 2}]}
+```
+
+Para testar no navegador:
+
+1. Executar `.venv/bin/python -B manage.py runserver`.
+2. Autenticar em `/accounts/login/` com usuário que tenha Perfil.
+3. Acessar `/api/dashboard/` (API navegável) ou `/api/dashboard/?format=json`.
+4. Testar `/api/dashboard/?inicio=2025-01-01&fim=2025-12-31&format=json`
+   e comparar com `/dashboard/` usando o mesmo período.
+5. Repetir com outra organização e em janela sem sessão: anônimos recebem 403
+   pelo mecanismo padrão SessionAuthentication, sem redirecionamento de login.
+
+Não houve validação visual em navegador. Nenhuma dependência, papel, model ou
+migração foi acrescentado nesta etapa.
+Resultado: **62 testes aprovados**, preservando os 53 anteriores. `check`,
+`makemigrations --check --dry-run`, `pip check` e `git diff --check` passaram.
+Banco persistente e backup mantiveram seus hashes iniciais.
+
 ## Aula 17 — Etapa 5: exportação CSV (slide 34)
 
 Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95` e `b5c2589`.
