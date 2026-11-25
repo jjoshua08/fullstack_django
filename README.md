@@ -1,5 +1,38 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 2: dashboard e período
+
+A etapa 1 está registrada no commit `b23e681`. A etapa 2 acrescenta `/dashboard/`,
+protegido por login, com acesso na navegação, cartões de total/disponíveis,
+distribuição por tipo e tabela dos cinco autores. O template herda `base.html`
+e apresenta `Sem dados no período.` quando não há resultados.
+
+`PeriodoForm` e `filtrar_periodo(request, qs)` em `acervo/forms.py` seguem o
+slide 11: datas opcionais, validação por `is_valid()` e limites inclusivos
+`data_cadastro__gte`/`data_cadastro__lte`. Se qualquer data for inválida, nenhum
+limite é aplicado; o formulário exibe os erros e a página explica que os valores
+correspondem a todo o acervo da organização. Datas válidas em ordem invertida
+produzem um resultado vazio, preservando a lógica do exemplo do professor.
+
+A view usa uma única base filtrada por organização e período. As quatro funções
+da etapa 1 aceitam agora um queryset opcional, mantendo as chamadas anteriores
+e reaplicando a restrição por organização. Nenhuma agregação foi duplicada.
+A série mensal está no contexto, sem gráfico ou preparação de dados JavaScript.
+Não foram implementados CSV, API, papéis ou otimizações de consultas.
+
+Validação: **31 testes aprovados**, incluindo os 21 anteriores e dez novos testes
+de acesso, autenticação, isolamento, limites inclusivos, consistência das quatro
+métricas, datas inválidas e ausência de dados. `check`,
+`makemigrations --check --dry-run` e `git diff --check` também passaram.
+
+Para validar manualmente, executar `.venv/bin/python -B manage.py runserver`,
+entrar com usuário que tenha perfil e acessar `http://127.0.0.1:8000/dashboard/`.
+Comparar o total sem filtros, testar início/fim em formato `AAAA-MM-DD`,
+limpar o período, enviar data inválida e escolher período sem livros.
+Repetir com outra organização e em sessão sem login. Não é necessário criar
+ou editar dados persistentes. A migração 0007 já estava aplicada ao iniciar
+esta etapa; o banco local já tinha alteração no Git e foi preservado.
+
 ## Aula 17 — Etapa 1: perguntas de negócio e métricas
 
 Implementação limitada aos slides 5–10: campo de data, métricas ORM e testes.

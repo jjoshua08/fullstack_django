@@ -6,30 +6,32 @@ from django.db.models.functions import TruncMonth
 from .models import Livro
 
 
-def livros_da_organizacao(organizacao):
+def livros_da_organizacao(organizacao, qs=None):
     """Recebe a organização do perfil autenticado, nunca um parâmetro do cliente."""
-    return Livro.objects.filter(organizacao=organizacao)
+    if qs is None:
+        qs = Livro.objects.all()
+    return qs.filter(organizacao=organizacao)
 
 
-def kpis(organizacao):
-    return livros_da_organizacao(organizacao).aggregate(
+def kpis(organizacao, qs=None):
+    return livros_da_organizacao(organizacao, qs).aggregate(
         total=Count('id'),
         disponiveis=Count('id', filter=Q(disponivel=True)),
     )
 
 
-def ranking_autores(organizacao):
+def ranking_autores(organizacao, qs=None):
     return (
-        livros_da_organizacao(organizacao)
+        livros_da_organizacao(organizacao, qs)
         .values('autor')
         .annotate(total=Count('id'))
         .order_by('-total')[:5]
     )
 
 
-def serie_mensal(organizacao):
+def serie_mensal(organizacao, qs=None):
     return (
-        livros_da_organizacao(organizacao)
+        livros_da_organizacao(organizacao, qs)
         .annotate(mes=TruncMonth('data_cadastro'))
         .values('mes')
         .annotate(total=Count('id'))
@@ -37,9 +39,9 @@ def serie_mensal(organizacao):
     )
 
 
-def distribuicao_acervo(organizacao):
+def distribuicao_acervo(organizacao, qs=None):
     return (
-        livros_da_organizacao(organizacao)
+        livros_da_organizacao(organizacao, qs)
         .values('tipo_acervo')
         .annotate(total=Count('id'))
     )

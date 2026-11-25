@@ -1,13 +1,29 @@
 from django.db.models import Q
 from django.shortcuts import render, redirect
 from .models import Livro
-from .forms import LivroForm
+from .forms import LivroForm, PeriodoForm, filtrar_periodo
+from .dashboard import kpis, ranking_autores, serie_mensal, distribuicao_acervo
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
 
 
 def org_atual(request):
     return request.user.perfil.organizacao
+
+
+@login_required
+def dashboard(request):
+    org = org_atual(request)
+    base = Livro.objects.filter(organizacao=org)
+    base = filtrar_periodo(request, base)
+    contexto = {
+        'form': PeriodoForm(request.GET),
+        'kpis': kpis(org, base),
+        'ranking': ranking_autores(org, base),
+        'serie_mensal': serie_mensal(org, base),
+        'distribuicao': distribuicao_acervo(org, base),
+    }
+    return render(request, 'acervo/dashboard.html', contexto)
 
 @login_required
 def lista_livros(request):

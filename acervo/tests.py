@@ -301,3 +301,135 @@ class DataCadastroMigrationTests(TransactionTestCase):
         finally:
             # Devolve o esquema atual mesmo se uma asserção falhar.
             MigrationExecutor(connection).migrate(atual)
+
+
+class DashboardViewTests(TestCase):
+    def setUp(self):
+        self.org_a = Organizacao.objects.create(nome='Dashboard A')
+        self.org_b = Organizacao.objects.create(nome='Dashboard B')
+        self.usuario_a = get_user_model().objects.create_user(username='dashboard_a')
+        self.usuario_b = get_user_model().objects.create_user(username='dashboard_b')
+        Perfil.objects.create(usuario=self.usuario_a, organizacao=self.org_a)
+        Perfil.objects.create(usuario=self.usuario_b, organizacao=self.org_b)
+        for org, autor, data, disponivel, tipo in [
+            (self.org_a, 'Ana', date(2025, 1, 10), True, 'fisico'),
+            (self.org_a, 'Ana', date(2025, 2, 10), False, 'digital'),
+            (self.org_a, 'Bia', date(2025, 3, 10), True, 'fisico'),
+            (self.org_b, 'Autor externo', date(2025, 2, 10), True, 'fisico'),
+        ]:
+            livro = Livro.objects.create(
+                organizacao=org, titulo=f'Livro de {autor}', autor=autor,
+                ano=2020, disponivel=disponivel, tipo_acervo=tipo,
+            )
+            Livro.objects.filter(pk=livro.pk).update(data_cadastro=data)
+        self.client.force_login(self.usuario_a)
+        self.url = reverse('dashboard')
+
+    def test_acesso_autenticado_template_e_navegacao(self):
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, 'acervo/dashboard.html')
+        self.assertContains(resposta, 'method="get"')
+        self.assertContains(resposta, 'name="inicio"')
+        self.assertContains(resposta, 'name="fim"')
+        self.assertContains(resposta, 'Limpar período')
+        self.assertContains(self.client.get(reverse('lista')), 'href="/dashboard/"')
+
+    def test_anonimo_redirecionado_para_login(self):
+        self.client.logout()
+        self.assertRedirects(
+            self.client.get(self.url), f'{reverse("login")}?next={self.url}',
+        )
+
+    def test_isolamento_de_organizacoes(self):
+        resposta = self.client.get(self.url, {'organizacao': self.org_b.pk})
+        self.assertEqual(resposta.context['kpis'], {'total': 3, 'disponiveis': 2})
+        self.assertNotContains(resposta, 'Autor externo')
+        self.client.force_login(self.usuario_b)
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.context['kpis'], {'total': 1, 'disponiveis': 1})
+        self.assertEqual(list(resposta.context['ranking']), [
+            {'autor': 'Autor externo', 'total': 1},
+        ])
+
+    def test_filtro_inicial_inclusivo(self):
+        resposta = self.client.get(self.url, {'inicio': '2025-02-10'})
+        self.assertEqual(resposta.context['kpis'], {'total': 2, 'disponiveis': 1})
+        self.assertEqual(list(resposta.context['serie_mensal']), [
+            {'mes': date(2025, 2, 1), 'total': 1},
+            {'mes': date(2025, 3, 1), 'total': 1},
+        ])
+
+    def test_filtro_final_inclusivo(self):
+        resposta = self.client.get(self.url, {'fim': '2025-02-10'})
+        self.assertEqual(resposta.context['kpis'], {'total': 2, 'disponiveis': 1})
+        self.assertEqual(list(resposta.context['ranking']), [{'autor': 'Ana', 'total': 2}])
+        self.assertEqual(list(resposta.context['serie_mensal']), [
+            {'mes': date(2025, 1, 1), 'total': 1},
+            {'mes': date(2025, 2, 1), 'total': 1},
+        ])
+
+    def test_ambas_as_datas_e_consistencia_das_quatro_metricas(self):
+        resposta = self.client.get(self.url, {
+            'inicio': '2025-02-10', 'fim': '2025-02-10',
+        })
+        self.assertEqual(resposta.context['kpis'], {'total': 1, 'disponiveis': 0})
+        self.assertEqual(list(resposta.context['ranking']), [{'autor': 'Ana', 'total': 1}])
+        self.assertEqual(list(resposta.context['distribuicao']), [
+            {'tipo_acervo': 'digital', 'total': 1},
+        ])
+        self.assertEqual(list(resposta.context['serie_mensal']), [
+            {'mes': date(2025, 2, 1), 'total': 1},
+        ])
+        for chave in ['ranking', 'distribuicao', 'serie_mensal']:
+            self.assertEqual(
+                sum(item['total'] for item in resposta.context[chave]),
+                resposta.context['kpis']['total'],
+            )
+        self.assertContains(resposta, 'value="2025-02-10"', count=2)
+        self.assertNotContains(resposta, 'Autor externo')
+
+    def test_datas_invalidas_exibem_erros_sem_aplicar_periodo(self):
+        for parametros in [
+            {'inicio': 'invalida'},
+            {'fim': '2025-02-30'},
+            {'inicio': '2025-03-10', 'fim': 'invalida'},
+            {'inicio': 'invalida', 'fim': '2025-01-10'},
+        ]:
+            with self.subTest(parametros=parametros):
+                resposta = self.client.get(self.url, parametros)
+                self.assertEqual(resposta.status_code, 200)
+                self.assertFalse(resposta.context['form'].is_valid())
+                self.assertContains(resposta, 'Período inválido.')
+                self.assertEqual(resposta.context['kpis'], {'total': 3, 'disponiveis': 2})
+                self.assertNotContains(resposta, 'Autor externo')
+
+    def test_periodo_sem_dados_e_intervalo_invertido(self):
+        for parametros in [
+            {'inicio': '2026-01-01'},
+            {'inicio': '2025-03-10', 'fim': '2025-01-10'},
+        ]:
+            with self.subTest(parametros=parametros):
+                resposta = self.client.get(self.url, parametros)
+                self.assertEqual(resposta.context['kpis'], {'total': 0, 'disponiveis': 0})
+                for chave in ['ranking', 'distribuicao', 'serie_mensal']:
+                    self.assertEqual(list(resposta.context[chave]), [])
+                self.assertContains(resposta, 'Sem dados no período.')
+
+    def test_organizacao_sem_livros(self):
+        Livro.objects.filter(organizacao=self.org_a).delete()
+        resposta = self.client.get(self.url)
+        self.assertEqual(resposta.context['kpis'], {'total': 0, 'disponiveis': 0})
+        self.assertContains(resposta, 'Sem dados no período.')
+        self.assertNotContains(resposta, 'Autor externo')
+
+    def test_metricas_restringem_organizacao_mesmo_com_base_ampla(self):
+        base = Livro.objects.filter(data_cadastro=date(2025, 2, 10))
+        self.assertEqual(kpis(self.org_a, base), {'total': 1, 'disponiveis': 0})
+        self.assertEqual(list(ranking_autores(self.org_a, base)), [{'autor': 'Ana', 'total': 1}])
+        self.assertEqual(list(distribuicao_acervo(self.org_a, base)), [
+            {'tipo_acervo': 'digital', 'total': 1},
+        ])
+        self.assertEqual(list(serie_mensal(self.org_a, base)), [
+            {'mes': date(2025, 2, 1), 'total': 1},
+        ])

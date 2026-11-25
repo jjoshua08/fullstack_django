@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block conteudo %}
+    <h1>Dashboard do acervo</h1>
+    <form method="get">
+        {{ form.as_p }}
+        <button type="submit">Filtrar</button>
+        <a href="{% url 'dashboard' %}">Limpar período</a>
+    </form>
+    {% if form.errors %}
+        <p>Período inválido. As métricas exibem todos os livros da sua organização.</p>
+    {% endif %}
+
+    <section aria-label="Indicadores do acervo">
+        <article style="display: inline-block; border: 1px solid; padding: 1rem; margin: 0 1rem 1rem 0;">
+            <h2>Total de livros</h2>
+            <p>{{ kpis.total }}</p>
+        </article>
+        <article style="display: inline-block; border: 1px solid; padding: 1rem; margin: 0 1rem 1rem 0;">
+            <h2>Livros disponíveis</h2>
+            <p>{{ kpis.disponiveis }}</p>
+        </article>
+    </section>
+
+    <h2>Distribuição do acervo</h2>
+    <ul>
+        {% for item in distribuicao %}
+            <li>
+                {% if item.tipo_acervo == 'fisico' %}Físicos{% elif item.tipo_acervo == 'digital' %}Digitais{% else %}{{ item.tipo_acervo }}{% endif %}:
+                {{ item.total }}
+            </li>
+        {% empty %}
+            <li>Sem dados no período.</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Cinco autores com mais livros</h2>
+    <table>
+        <thead>
+            <tr><th scope="col">Autor</th><th scope="col">Total de livros</th></tr>
+        </thead>
+        <tbody>
+            {% for item in ranking %}
+                <tr><td>{{ item.autor }}</td><td>{{ item.total }}</td></tr>
+            {% empty %}
+                <tr><td colspan="2">Sem dados no período.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

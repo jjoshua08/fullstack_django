@@ -5,6 +5,10 @@
 </head>
 <body>
     <header>Biblioteca</header>
+    <nav aria-label="Navegação principal">
+        <a href="{% url 'lista' %}">Acervo</a>
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+    </nav>
 
     {% block conteudo %}
     {% endblock %}
