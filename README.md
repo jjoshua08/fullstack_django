@@ -1,5 +1,137 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 4: consultas e N+1 (slides 19–33)
+
+Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95`.
+Foram adicionados instrumentos de desenvolvimento e cinco testes em
+`acervo/tests_performance.py`. Nenhuma consulta funcional, model, migração,
+regra de negócio ou interface foi alterada. DRF já estava presente nesta revisão;
+não foi implementada API nesta etapa.
+
+### Medições reais: demonstração versus telas
+
+Demonstração didática em SQLite de testes: três livros da mesma organização,
+acessando `livro.organizacao.nome` em cada iteração, com limite de 50 e escopo
+por organização. Sem `select_related`: **4 consultas**; com
+`select_related('organizacao')`: **1 consulta com INNER JOIN**. Esse é um exemplo
+controlado, não uma correção aplicada às views.
+
+| Tela medida por GET | 3 livros próprios | 30 livros próprios |
+|---|---:|---:|
+| Listagem | 5 | 5 |
+| Dashboard | 8 | 8 |
+| Cadastro | 4 | 4 |
+| Edição | 5 | 5 |
+| Admin de livros (4 e 31 livros globais) | 6 | 6 |
+| Admin de perfis | 5 | 5 |
+
+As telas foram percorridas pelo cliente Django, com log SQL habilitado, usando
+banco de testes e perfil autenticado. Os quatro acessos constantes de sessão,
+usuário, perfil e organização não são N+1. O dashboard executa outras quatro
+consultas, uma por métrica. Nenhuma tela ultrapassou dez consultas.
+O Admin de livros já aplica JOIN automaticamente por exibir a ForeignKey.
+Os dois COUNTs repetidos no Admin são constantes (contagem filtrada e total),
+não N+1; não alteramos essa funcionalidade padrão. O Admin mantém sua visão global.
+Não foi identificado N+1 real nos fluxos medidos. Não há M2M nem acesso reverso
+em loops que justifique `prefetch_related()`; não foram criadas relações artificiais.
+
+### Sete métodos, na ordem dos slides
+
+1. **Slide 23 — `str(qs.query)`:** SQL compilado sob `assertNumQueries(0)`.
+2. **Slide 24 — `connection.queries`:** `reset_queries()` seguido de `list(qs)`
+   em queryset novo, com `override_settings(DEBUG=True)`: uma consulta registrada.
+   Sem DEBUG (ou cursor de diagnóstico), esse histórico não é habilitado;
+   reusar queryset avaliado ocultaria a execução por causa do cache de resultados.
+3. **Slide 25 — `CaptureQueriesContext`:** quatro consultas sem JOIN versus uma
+   com JOIN; o comando abaixo imprime todo o SQL efetivamente executado.
+4. **Slide 26 — LOGGING:** logger `django.db.backends`, handler console e nível
+   DEBUG, restritos à ativação local. O teste também captura e verifica um SELECT
+   nesse logger. O percurso das telas foi repetido com `SQL_LOGGING=1`.
+5. **Slide 27 — `qs.explain()`:** SQLite retornou `SCAN acervo_livro` sem filtro;
+   organização + período retornou
+   `SEARCH acervo_livro USING INDEX acervo_livro_organizacao_id_4d062d61 (organizacao_id=?)`.
+6. **Slides 28–30 — Debug Toolbar 8.0.0:** instalada sem downgrade. PyPI declara
+   suporte a Python 3.14 e Django 6.1; `pip check` e `check` com Toolbar passaram.
+   Em banco em memória, uma requisição local ao dashboard retornou HTTP 200 com
+   Toolbar inserida no HTML. **Não houve inspeção visual em navegador.**
+7. **Slide 31 — `assertNumQueries`:** asserts de 4/1 na relação, orçamentos fixos
+   das telas e comparação de 3/30 registros. A expectativa didática incorreta
+   de uma consulta sem JOIN produz `4 != 1 : 4 queries executed, 1 expected`,
+   capturada por `assertRaises(AssertionError)`; nenhum teste falho fica na suíte.
+
+Referência de compatibilidade: https://pypi.org/project/django-debug-toolbar/8.0.0/
+
+### SQL efetivamente capturado na demonstração
+
+Sem `select_related` (o ID 2 pertence à organização temporária dessa execução):
+
+```sql
+SELECT "acervo_livro"."id", "acervo_livro"."organizacao_id", "acervo_livro"."tipo_acervo", "acervo_livro"."categoria", "acervo_livro"."titulo", "acervo_livro"."autor", "acervo_livro"."ano", "acervo_livro"."disponivel", "acervo_livro"."data_cadastro" FROM "acervo_livro" WHERE "acervo_livro"."organizacao_id" = 2 ORDER BY "acervo_livro"."id" ASC LIMIT 50
+SELECT "core_organizacao"."id", "core_organizacao"."nome", "core_organizacao"."criada_em" FROM "core_organizacao" WHERE "core_organizacao"."id" = 2 LIMIT 21
+SELECT "core_organizacao"."id", "core_organizacao"."nome", "core_organizacao"."criada_em" FROM "core_organizacao" WHERE "core_organizacao"."id" = 2 LIMIT 21
+SELECT "core_organizacao"."id", "core_organizacao"."nome", "core_organizacao"."criada_em" FROM "core_organizacao" WHERE "core_organizacao"."id" = 2 LIMIT 21
+```
+
+Com `select_related('organizacao')`:
+
+```sql
+SELECT "acervo_livro"."id", "acervo_livro"."organizacao_id", "acervo_livro"."tipo_acervo", "acervo_livro"."categoria", "acervo_livro"."titulo", "acervo_livro"."autor", "acervo_livro"."ano", "acervo_livro"."disponivel", "acervo_livro"."data_cadastro", "core_organizacao"."id", "core_organizacao"."nome", "core_organizacao"."criada_em" FROM "acervo_livro" INNER JOIN "core_organizacao" ON ("acervo_livro"."organizacao_id" = "core_organizacao"."id") WHERE "acervo_livro"."organizacao_id" = 2 ORDER BY "acervo_livro"."id" ASC LIMIT 50
+```
+
+Não foi feito benchmark de tempo. O registro individual exibiu `0.000` segundos,
+resolução insuficiente para alegar ganho temporal; a comparação é de consultas.
+
+### Índices — slide 33
+
+A introspecção confirmou o índice existente da FK `organizacao_id`:
+`acervo_livro_organizacao_id_4d062d61`. A busca por organização e período usa esse
+índice. `data_cadastro` não possui índice próprio. Não há evidência, nesta carga
+pequena, que justifique adicionar índice isolado ou composto; planos/volume reais
+maiores podem justificar reavaliação futura. Não foram criados índices redundantes,
+migrações ou cache. Dados e backup persistentes mantiveram seus hashes.
+
+### Reprodução e ativação local
+
+Demonstração completa, na ordem dos sete métodos, com SQL e contagens das telas
+(exclusivamente banco de testes; não cria registros no banco persistente):
+
+```bash
+PERFORMANCE_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_performance
+DJANGO_ENV=development SQL_LOGGING=1 PERFORMANCE_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_performance
+```
+
+Toolbar local:
+
+```bash
+DJANGO_ENV=development DEBUG_TOOLBAR=1 .venv/bin/python -B manage.py runserver
+```
+
+Log SQL local como alternativa:
+
+```bash
+DJANGO_ENV=development SQL_LOGGING=1 .venv/bin/python -B manage.py runserver
+```
+
+Abrir `http://127.0.0.1:8000/`, autenticar com usuário com perfil e percorrer
+listagem, cadastro, edição e `/dashboard/`; para staff autorizado, visitar o
+Admin de livros e perfis. Abrir o painel SQL, comparar consultas repetidas e JOINs.
+Não salvar formulários para apenas inspecionar consultas. Login normal pode gravar
+sessão: para reprodução sem qualquer escrita persistente, usar os comandos de testes.
+
+A ativação exige `DJANGO_ENV=development` e `DJANGO_DEBUG=1` (padrão local anterior
+preservado), mais a flag específica. Sem flags, ambos ficam desligados. Em produção,
+definir `DJANGO_ENV=production DJANGO_DEBUG=0`; verificou-se que app, middleware,
+rota e log SQL ficam desativados mesmo com as flags de instrumentos em 1.
+A Toolbar usa `INTERNAL_IPS=['127.0.0.1']` e rota `__debug__/`.
+
+### Validação
+
+**43 testes passaram**: 38 anteriores e cinco novos. Os testes novos também
+verificam métricas, período e isolamento com orçamento de oito consultas no dashboard.
+`check`, `makemigrations --check --dry-run`, `git diff --check`, `pip check`,
+e `check` com Toolbar habilitada passaram. A interface visual não foi validada.
+
+
 ## Aula 17 — Etapa 3: gráfico de barras
 
 Pré-requisitos confirmados: commits `b23e681` (etapa 1) e `ee82f95` (etapa 2).

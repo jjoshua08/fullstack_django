@@ -27,7 +27,9 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
+DESENVOLVIMENTO_LOCAL = DEBUG and os.getenv('DJANGO_ENV') == 'development'
+DEBUG_TOOLBAR_ENABLED = DESENVOLVIMENTO_LOCAL and os.getenv('DEBUG_TOOLBAR', '0') == '1'
 
 ALLOWED_HOSTS = []
 
@@ -55,6 +57,25 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if DEBUG_TOOLBAR_ENABLED:
+    INSTALLED_APPS.append('debug_toolbar')
+    MIDDLEWARE.insert(1, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+    INTERNAL_IPS = ['127.0.0.1']
+
+if DESENVOLVIMENTO_LOCAL and os.getenv('SQL_LOGGING', '0') == '1':
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {'console': {'class': 'logging.StreamHandler'}},
+        'loggers': {
+            'django.db.backends': {
+                'handlers': ['console'],
+                'level': 'DEBUG',
+                'propagate': False,
+            },
+        },
+    }
 
 ROOT_URLCONF = 'biblioteca.urls'
 

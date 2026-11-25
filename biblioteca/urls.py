@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
 
@@ -32,3 +33,6 @@ path(
     name='logout'
 ),
 ]
+
+if settings.DEBUG and settings.DEBUG_TOOLBAR_ENABLED:
+    urlpatterns += [path('__debug__/', include('debug_toolbar.urls'))]
