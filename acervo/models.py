@@ -36,5 +36,6 @@ class Livro(DaOrganizacao):
     autor = models.CharField(max_length=100)
     ano = models.IntegerField()
     disponivel = models.BooleanField(default=True)
+    data_cadastro = models.DateField(auto_now_add=True)
     def __str__(self):
         return self.titulo

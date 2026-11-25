@@ -1,5 +1,71 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 1: perguntas de negócio e métricas
+
+Implementação limitada aos slides 5–10: campo de data, métricas ORM e testes.
+Não inclui dashboard HTML, filtro por período, gráficos, CSV, API ou papéis.
+As seções anteriores da Aula 14, abaixo, registram o estado daquela entrega;
+suas contagens de testes e migrações são históricas.
+
+| Pergunta | Função em `acervo/dashboard.py` | Técnica / slide |
+|---|---|---|
+| Quantos livros existem e quantos estão disponíveis? | `kpis(organizacao)` | `aggregate`, `Count('id')` e `Count('id', filter=Q(disponivel=True))` — slide 8 |
+| Quais são os cinco autores com mais livros? | `ranking_autores(organizacao)` | `values('autor')`, `annotate`, `order_by('-total')`, `[:5]` — slide 9 |
+| Quantos livros foram cadastrados por mês? | `serie_mensal(organizacao)` | `TruncMonth('data_cadastro')`, agrupamento e ordenação por `mes` — slide 10 |
+| Quantos livros são físicos e digitais? | `distribuicao_acervo(organizacao)` | `values('tipo_acervo')` e `annotate(total=Count('id'))` — slide 6 |
+
+Todas as funções partem de `livros_da_organizacao(organizacao)`, que filtra
+`Livro.objects` pelo relacionamento existente. Na futura view/API, a organização
+deve vir de `request.user.perfil.organizacao`, nunca de um parâmetro enviado pelo
+cliente. As funções não dependem de HTTP e podem ser reutilizadas por ambas.
+Não há joins que multipliquem linhas: `distinct=True` não é necessário aqui.
+O ranking agrupa o texto de `autor`; empates não têm ordem secundária definida.
+Categorias de distribuição sem livros não produzem uma linha de valor zero.
+Sem livros, os KPIs retornam zero e os outros resultados ficam vazios.
+
+### Data de cadastro e preservação do legado
+
+`Livro.data_cadastro` é um `DateField(auto_now_add=True)`: novos livros recebem
+a data corrente do ambiente de execução no cadastro, preservada nas edições.
+A migração `acervo.0007_livro_data_cadastro` fornece `datetime.date.today` como
+default temporário (`preserve_default=False`) para os livros existentes.
+
+**Limitação:** registros antigos receberão a data em que a migração for aplicada,
+como referência de importação. Essa data não representa seu cadastro histórico,
+que não foi armazenado. Assim, a série mensal concentrará esses livros no mês da
+migração. Nenhuma data histórica foi inferida a partir de `ano` ou da organização.
+Os demais campos e registros são preservados.
+
+A migração foi gerada e validada em banco de testes, mas **não foi aplicada ao
+banco persistente nesta etapa**. Após autorização, aplicar localmente com:
+
+```bash
+.venv/bin/python -B manage.py migrate acervo
+```
+
+Até essa aplicação, o esquema persistente não possui a nova coluna; o código
+atualizado que consulta `Livro` depende da migração para funcionar nesse banco.
+Não incluir `biblioteca_db` nem `biblioteca_db.backup` no commit.
+
+### Validação da etapa 1
+
+```bash
+.venv/bin/python -B manage.py check
+.venv/bin/python -B manage.py makemigrations --check --dry-run
+.venv/bin/python -B manage.py test
+git diff --check
+```
+
+A suíte executada nesta etapa passou com **21 testes**: os 14 existentes,
+seis testes novos de métricas/data e um teste de migração. As quatro métricas
+usam fixtures determinísticas, com organizações distintas, seis autores,
+meses em anos diferentes e organização vazia. Verificam isolamento, limite
+de cinco autores, ordem mensal e somas da série/distribuição iguais ao total.
+O teste de migração retrocede somente o banco de testes à migração 0006,
+cria dois registros legados em organizações distintas e aplica a 0007,
+comparando todos os campos anteriores e a data de referência da execução.
+Nenhum dado de demonstração foi criado no banco persistente.
+
 O projeto Django mantém livros de organizações distintas no mesmo banco, isolando
 as views de negócio pela organização do usuário autenticado. Não implementa DRF,
 papéis ou permissões adicionais da Aula 15.
