@@ -1,5 +1,161 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Validação final da Aula 17 — Etapa 8 (25/11/2026)
+
+Esta seção consolida o estado atual; as seções anteriores por etapa, abaixo,
+são registros históricos. Nenhuma funcionalidade ou layout foi alterado nesta
+fase. Foram preservados os 71 testes e acrescentado um único teste de comparação
+independente (`acervo/tests_validacao_final.py:31`), usando SQL direto no SQLite
+em memória, sem chamar as funções de métricas para obter o resultado esperado.
+As organizações possuem 3 e 5 livros, dados determinísticos em `setUp` e login
+com `client.force_login()`. A comparação cobre as quatro métricas, HTML/API/CSV,
+com e sem período, e confirma os totais conhecidos.
+
+### Perguntas, métricas e técnicas
+
+| Pergunta | Métrica | Técnica |
+|---|---|---|
+| Quantos livros existem e quantos estão disponíveis? | KPI | aggregate, Count('id'), filter=Q(disponivel=True) |
+| Quais os cinco autores com mais livros? | Ranking | values, annotate, order_by('-total'), [:5] |
+| Quantos livros foram cadastrados por mês? | Série | TruncMonth, values, annotate, order_by('mes') |
+| Quantos livros são físicos/digitais? | Distribuição | values('tipo_acervo'), annotate, Count |
+
+Todos os querysets partem da organização autenticada. `distinct=True` não é
+necessário porque essas agregações não introduzem joins multiplicadores.
+
+### Conformidade (referências arquivo:linha)
+
+| Slides | Requisito | Status | Evidência |
+|---|---|---|---|
+| 5–10 | Perguntas e quatro métricas centralizadas | ATENDIDO | acervo/dashboard.py:16,23,32,42 |
+| 5–10 | Organização como base de todas as métricas | ATENDIDO | acervo/dashboard.py:9 |
+| 11 | Formulário validado e limites inclusivos | ATENDIDO | acervo/forms.py:20,25 |
+| 12 | Login, contexto e base organização/período | ATENDIDO | acervo/views.py:58 |
+| 13 | Cartões, ranking, distribuição e empty | ATENDIDO | templates/acervo/dashboard.html:18,29,41 |
+| 14–18 | Chart.js local, JSON seguro, canvas, barras, MM/AAAA | ATENDIDO (código/dados) | templates/acervo/dashboard.html:55; acervo/static/js/dashboard.js:1; acervo/views.py:72 |
+| 17,40 | Gráfico funcionando no navegador | PARCIALMENTE ATENDIDO | Dados/template/static testados; renderização visual não executada |
+| 19–21 | N+1 didático 4→1, SQL e JOIN | ATENDIDO | acervo/tests_performance.py:42,47,52 |
+| 22–31 | Sete métodos e falha didática controlada | ATENDIDO | acervo/tests_performance.py:52; biblioteca/settings.py:61,66 |
+| 28–30 | Toolbar restrita ao desenvolvimento | ATENDIDO (configuração) | biblioteca/settings.py:30,61; biblioteca/urls.py; inspeção visual pendente |
+| 32 | Telas medidas, contagens constantes | ATENDIDO | acervo/tests_performance.py:118; acervo/tests_papeis.py:60 |
+| 33 | Índices avaliados por plano; nenhum cache de métricas | ATENDIDO | acervo/tests_performance.py:52; SEARCH usa índice da organização |
+| 34 | CSV nativo, filtros, download e proteção de fórmulas | ATENDIDO | acervo/views.py:23,30,52; acervo/tests_csv.py:53,95 |
+| 35 | APIView, IsAuthenticated, Response, reuso | ATENDIDO | acervo/api.py:11 |
+| 36 | Papel padrão, propriedade e decorator | ATENDIDO | core/models.py:23; core/decorators.py:9 |
+| 36 | Série/CSV restritos no backend; sem perfil retorna 403 | ATENDIDO | acervo/views.py:16,52,72; acervo/api.py:22; acervo/tests_papeis.py:27,73,91 |
+| 37 | TestCase, setUp, force_login, duas organizações | ATENDIDO | acervo/tests_validacao_final.py:15 |
+| 37–40 | Métricas, período, vazio, operador e regressão | ATENDIDO | acervo/tests.py:194; acervo/tests_papeis.py:27; acervo/tests_csv.py:83 |
+| 40 | Comparação independente e ao menos dois testes de métricas | ATENDIDO | acervo/tests_validacao_final.py:31; acervo/tests.py:217,221,230,242 |
+
+### Seis erros do slide 38
+
+1. Organização: testes com duas organizações, parâmetros maliciosos e SQL direto
+   confirmam isolamento no HTML, API e CSV.
+2. N+1: contagens constantes ao aumentar registros; JOIN didático reduz 4 para 1.
+3. Data: datas inválidas não geram 500; nenhum limite é aplicado se o form é inválido,
+   mantendo a regra literal do slide 11 e o isolamento.
+4. Ordenação: ranking decrescente e série cronológica, inclusive mudança de ano,
+   cobertos por resultados esperados independentes.
+5. Cache: nenhum uso de cache de aplicação nas métricas/views; não foi adicionado
+   cache. O cache interno de queryset avaliado não é cache compartilhado entre tenants.
+6. Vazio: KPIs zero, listas vazias, `{% empty %}`, JSON `[]` e canvas preparados;
+   funcionamento visual do gráfico vazio ainda precisa ser conferido no navegador.
+
+Slide 39: atividades 1 (métricas), 2 (view/template) e 4 (CSV) ATENDIDAS.
+Atividade 3 (gráfico) PARCIALMENTE ATENDIDA na validação: implementação e dados
+confirmados, renderização não observada. Slide 40: métricas, período, CSV,
+ausência de N+1 nos fluxos avaliados, isolamento e mínimo de testes ATENDIDOS;
+comprovação do gráfico em execução PARCIALMENTE ATENDIDA.
+
+### Resultados reais e medições
+
+- Suíte completa: **72 executados, 72 aprovados, 0 reprovados**.
+- Reexecução das demonstrações: desempenho **5/5**; CSV **10/10**. São subconjuntos
+  da suíte, não 15 testes novos. A falha didática é esperada e capturada.
+- `check`: sem problemas; `showmigrations`: todas aplicadas, inclusive core.0003.
+- `makemigrations --check --dry-run`: nenhuma mudança.
+- `pip check`: sem dependências quebradas; seis pins do requirements coincidem
+  exatamente com as versões instaladas.
+- `findstatic`: ambos os scripts encontrados; `git diff --check`: aprovado.
+- Produção com flags de diagnóstico ligadas: app/middleware/rota da Toolbar e
+  logging SQL permanecem desativados. `check` local com Toolbar passou.
+
+| Medição | Poucos livros | Mais livros |
+|---|---:|---:|
+| Listagem (3→30 próprios) | 5 | 5 |
+| Dashboard administrador (3→30) | 8 | 8 |
+| Dashboard operador (2→22, teste de papéis) | 7 | 7 |
+| Cadastro | 4 | 4 |
+| Edição | 5 | 5 |
+| Admin livros (4→31 globais) | 6 | 6 |
+| Admin perfis durante aumento do acervo | 5 | 5 |
+| Gerador CSV (3→30, sem autenticação HTTP) | 3 | 3 |
+
+Demonstração separada de acesso a FK: 4 consultas sem select_related, 1 com JOIN.
+Plano real: SCAN sem filtro; SEARCH com índice da FK organizacao_id para organização
++ período. Não se justificou índice adicional; não foi feito benchmark temporal.
+
+### Execução, papéis e URLs
+
+```bash
+.venv/bin/python -B manage.py check
+# Somente quando autorizado; nesta auditoria nenhuma migração foi aplicada:
+.venv/bin/python -B manage.py migrate
+.venv/bin/python -B manage.py runserver
+```
+
+Usar a configuração `.env` local já existente, sem publicar credenciais. No Admin,
+um responsável com permissão de alterar Perfil deve vincular cada usuário à sua
+organização e selecionar Administrador ou Operador. Não há promoção automática
+por status staff/superusuário. Novos perfis usam operador.
+
+| Recurso | Admin da organização | Operador |
+|---|---|---|
+| KPIs/ranking HTML e API | Sim | Sim |
+| Distribuição HTML | Sim | Sim |
+| Série HTML/API | Sim | Não enviada |
+| CSV | Sim | 403 |
+
+URLs: `/accounts/login/`, `/dashboard/`, `/api/dashboard/?format=json`,
+`/dashboard/exportar-csv/`. Todas as métricas usam `inicio` e `fim` opcionais.
+Sem perfil, funcionalidades do dashboard retornam 403. Admin de organização não
+recebe acesso ao Django Admin automaticamente.
+
+Reprodução da validação:
+
+```bash
+.venv/bin/python -B manage.py test
+PERFORMANCE_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_performance
+CSV_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_csv
+```
+
+### Limitações e checklist de entrega
+
+- Domínio adaptado para Livro, não empréstimos. Autor é texto; empates do ranking
+  não possuem desempate secundário. O top cinco pode somar menos que o total.
+- Livros antigos usam data da migração como referência de importação, não histórico
+  real. Perfil legado recebeu operador. Nesta auditoria não houve escrita persistente.
+- Testes usam SQLite de testes; não certificam escala/produção nem segurança exaustiva.
+- Banco local e backup já são rastreados pelo Git: não incluí-los no último commit.
+- Fontes dos slides são os requisitos transcritos pelo usuário, não os PDFs integrais.
+- Não houve validação visual nem teste manual de download em navegador nesta auditoria.
+
+Antes da entrega, conferir manualmente:
+
+- [ ] Administrador: abrir dashboard, confirmar barras, legenda, meses e console sem erros.
+- [ ] Comparar cartões/distribuição/gráfico, aplicar período e limpar filtro.
+- [ ] Conferir data inválida e gráfico sem registros.
+- [ ] Baixar CSV e conferir acentos, aspas, período e registros da própria organização.
+- [ ] Operador: sem gráfico/série/link; acesso direto ao CSV retorna 403.
+- [ ] Repetir com outra organização e conferir API; sem sessão, verificar bloqueios.
+- [ ] Revisar diff e staging, excluindo banco, backup, credenciais e temporários.
+
+**Parecer: NÃO APTO PARA ENTREGA definitiva enquanto não for comprovado o gráfico
+no navegador.** Código e validação automatizada estão aprovados e aptos ao commit
+da etapa 8; não foi detectada divergência funcional nos testes executados. A
+pendência é de evidência de execução visual, não uma falha de gráfico constatada.
+
+
 ## Aula 17 — Etapa 7: dashboard por papel (slide 36)
 
 Commits das etapas 1–6 confirmados: `b23e681`, `ee82f95`, `bbb6b95`, `b5c2589`,
