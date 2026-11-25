@@ -1,3 +1,7 @@
+import csv
+
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse
 from django.db.models import Q
 from django.shortcuts import render, redirect
 from .models import Livro
@@ -11,6 +15,42 @@ def org_atual(request):
     return request.user.perfil.organizacao
 
 
+def proteger_celula_csv(valor):
+    """Neutraliza fórmulas somente na saída; não altera o valor armazenado."""
+    if isinstance(valor, str) and valor.startswith(('=', '+', '-', '@')):
+        return "'" + valor
+    return valor
+
+
+def gerar_csv_livros(request):
+    """Gerador interno, sem rota própria; autorização cabe à view de exportação."""
+    org = org_atual(request)
+    qs = filtrar_periodo(request, Livro.objects.filter(organizacao=org))
+    resp = HttpResponse(content_type='text/csv')
+    resp['Content-Disposition'] = 'attachment; filename="livros.csv"'
+    w = csv.writer(resp)
+    w.writerow(['Título', 'Autor', 'Ano', 'Tipo de acervo', 'Categoria',
+                'Disponibilidade', 'Data de cadastro'])
+    for livro in qs:
+        w.writerow([
+            proteger_celula_csv(livro.titulo),
+            proteger_celula_csv(livro.autor),
+            livro.ano,
+            proteger_celula_csv(livro.get_tipo_acervo_display()),
+            proteger_celula_csv(livro.get_categoria_display()),
+            'Disponível' if livro.disponivel else 'Indisponível',
+            livro.data_cadastro,
+        ])
+    return resp
+
+
+@login_required
+def exportar_csv(request):
+    # Bloqueio temporário obrigatório: etapa 7 definirá a autorização por papel
+    # antes de permitir chamar gerar_csv_livros(request). Não usar flags do Admin.
+    raise PermissionDenied('Exportação indisponível até a definição dos papéis de negócio.')
+
+
 @login_required
 def dashboard(request):
     org = org_atual(request)
@@ -22,6 +62,7 @@ def dashboard(request):
         for r in por_mes_qs
     ]
     contexto = {
+        'pode_exportar_csv': False,  # Liberação por papel somente na etapa 7.
         'form': PeriodoForm(request.GET),
         'kpis': kpis(org, base),
         'ranking': ranking_autores(org, base),

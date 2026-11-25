@@ -1,5 +1,75 @@
 # Biblioteca — Aula 14: multi-organização
 
+## Aula 17 — Etapa 5: exportação CSV (slide 34)
+
+Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95` e `b5c2589`.
+A geração foi implementada em `gerar_csv_livros(request)`, função interna de
+`acervo/views.py` sem URL própria. Usa `org_atual()`,
+`Livro.objects.filter(organizacao=org)` e o mesmo `filtrar_periodo()` do dashboard.
+Preserva limites inclusivos e o comportamento anterior: qualquer data inválida
+faz com que nenhum limite de período seja aplicado, mantendo o escopo da organização.
+
+Segue a técnica do slide: biblioteca nativa `csv`,
+`HttpResponse(content_type='text/csv')`,
+`Content-Disposition: attachment; filename="livros.csv"`, `csv.writer()` e
+`writerow()`. Campos: `titulo`, `autor`, `ano`, `tipo_acervo`, `categoria`,
+`disponivel` e `data_cadastro`. Tipo/categoria são apresentados pelos rótulos dos
+choices, disponibilidade como Disponível/Indisponível e data em AAAA-MM-DD.
+O conteúdo usa UTF-8 e o escritor padrão trata vírgulas, aspas e quebras de linha.
+
+### Geração implementada; liberação pendente da etapa 7
+
+A rota `/dashboard/exportar-csv/` (`exportar_csv`) exige login e lança
+`PermissionDenied` para todos os autenticados, inclusive staff/superusuários.
+Não existe flag de cliente que autorize a exportação. A view do dashboard fixa
+`pode_exportar_csv=False`; o link preparado no template permanece oculto e
+preserva `inicio`/`fim` com codificação de URL. Não foram criados papéis ou
+decorators definitivos. Na etapa 7, a autorização por papel deverá substituir
+esse bloqueio antes de chamar o gerador interno e de disponibilizar o link.
+
+Essa separação permite testar o CSV sem desativar a proteção da rota.
+Não há download utilizável pelo navegador nesta etapa: anônimos são enviados ao
+login e autenticados recebem 403. A geração interna não é uma view pública.
+
+### Proteção e desempenho
+
+Campos textuais iniciados por `=`, `+`, `-` ou `@` recebem um apóstrofo somente
+na saída. Os valores persistidos não são modificados. A proteção implementa o
+alerta específico do slide; não depende apenas das aspas usadas pelo CSV.
+Todos os campos exportados são locais a Livro, portanto não há `select_related`
+nem JOIN artificial. Medição do gerador com usuário carregado e cache relacional
+vazio: **3 consultas com 3 livros e 3 consultas com 30 livros** (perfil,
+organização e livros). Essa contagem não inclui autenticação HTTP; a rota pública
+permanece bloqueada. Os testes de desempenho anteriores foram preservados.
+
+### Validação e reprodução
+
+Dez testes em `acervo/tests_csv.py` verificam campos/cabeçalhos, isolamento,
+limites inclusivos e KPI, vazio, datas inválidas, caracteres especiais,
+neutralização de fórmulas, consultas e bloqueios. Um teste renderiza isoladamente
+o ramo futuro do link para conferir os parâmetros sem liberar a rota.
+
+```bash
+CSV_REPORT=1 .venv/bin/python -B manage.py test acervo.tests_csv
+.venv/bin/python -B manage.py check
+.venv/bin/python -B manage.py makemigrations --check --dry-run
+.venv/bin/python -B manage.py test
+git diff --check
+```
+
+O primeiro comando reproduz o CSV e imprime o SQL em banco de testes, sem gravar
+no banco persistente. Exemplo efetivamente gerado:
+
+```csv
+Título,Autor,Ano,Tipo de acervo,Categoria,Disponibilidade,Data de cadastro
+"Programação, ""Django""",João,2020,Físico,800 - Literatura,Disponível,2025-01-10
+```
+
+Nenhum model, migração, dependência, API ou papel foi criado nesta etapa.
+Resultado: **53 testes aprovados** (43 anteriores e dez novos); `check`,
+`makemigrations --check --dry-run` e `git diff --check` passaram.
+Os hashes do banco persistente e do backup permaneceram iguais aos iniciais.
+
 ## Aula 17 — Etapa 4: consultas e N+1 (slides 19–33)
 
 Commits anteriores confirmados: `b23e681`, `ee82f95`, `bbb6b95`.

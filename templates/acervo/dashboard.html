@@ -8,6 +8,9 @@
         <button type="submit">Filtrar</button>
         <a href="{% url 'dashboard' %}">Limpar período</a>
     </form>
+    {% if pode_exportar_csv %}
+        <a href="{% url 'exportar_csv' %}?inicio={{ request.GET.inicio|urlencode }}&amp;fim={{ request.GET.fim|urlencode }}">Exportar CSV</a>
+    {% endif %}
     {% if form.errors %}
         <p>Período inválido. As métricas exibem todos os livros da sua organização.</p>
     {% endif %}
